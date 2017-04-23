@@ -108,7 +108,18 @@ public class TemplateCompiler {
         // under maven or other build tools, java.class.path is wrong
         // build our own from current context
         StringBuilder classpath = new StringBuilder();
-        URL[] classpathUrls = ((URLClassLoader)(Thread.currentThread().getContextClassLoader())).getURLs();
+        
+        // Under Jetty WebAppClassLoader have empty urls, parent not empty.
+		ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+		ClassLoader classLoader2 = classLoader;
+		while (classLoader2 != null && 
+				classLoader2 instanceof URLClassLoader &&
+				((URLClassLoader) classLoader2).getURLs().length == 0) {
+			classLoader2 = classLoader2.getParent();
+		}
+		classLoader = classLoader2 != null ? classLoader2 : classLoader;
+        URL[] classpathUrls = ((URLClassLoader)classLoader).getURLs();
+        
         for (URL url : classpathUrls) {
             if (classpath.length() > 0) {
                 classpath.append(File.pathSeparator);
@@ -166,7 +177,7 @@ public class TemplateCompiler {
         
         for (Diagnostic diagnostic : diagnostics.getDiagnostics()) {
             // file:/home/joelauer/workspace/fizzed/java-rocker/reloadtest/target/generated-test-sources/rocker/views/index.java
-            JavaFileObject jfo = (JavaFileObject)diagnostic.getSource();
+            
             //log.debug("java file: {}", jfo.toUri());
             //log.debug("source: {}", diagnostic.getSource());
             //log.debug("line num: {}", diagnostic.getLineNumber());
@@ -179,6 +190,13 @@ public class TemplateCompiler {
             //log.debug("message: {}", diagnostic.getMessage(null));
             
             if (diagnostic.getKind() == Kind.ERROR) {
+                JavaFileObject jfo = (JavaFileObject)diagnostic.getSource();
+                // can be null
+                if (jfo == null) {
+                    log.error(diagnostic.getMessage(null));
+                    continue;
+                }
+                
                 File javaFile = new File(jfo.toUri()).getAbsoluteFile();
                 
                 CompilationUnit unit = unitsByJavaFile.get(javaFile);
